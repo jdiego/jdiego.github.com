@@ -290,6 +290,7 @@ You might also wonder why it doesn't work with inheritence. Inheritence in C++ a
 at runtime, or in other words, a data that the compiler won't have and can't guess! However, compile time type inspection is 
 much more efficient (0 impact at runtime) and almost as powerful as if it were at runtime. For instance:
 
+```c++
 // Using the previous A struct and is_valid helper.
 
 struct D : A
@@ -306,8 +307,12 @@ D d;
 A& a = d; // Here we lost the type of d at compile time.
 std::cout << testHasSerialize(d) << std::endl; // Output 1.
 std::cout << testHasSerialize(a) << std::endl; // Output 0.
+```
+
 Last but no least, our test cover the main cases but not the tricky ones like a Functor:
 
+
+```c++
 struct E
 {
     struct Functor
@@ -324,12 +329,13 @@ struct E
 E e;
 std::cout << e.serialize() << std::endl; // Succefully call the functor.
 std::cout << testHasSerialize(e) << std::endl; // Output 0.
+```
+
 The trade-off for a full coverage would be the readability. As you will see, C++11 shines in that domain!
+Time to use our genius idea: Now you would think that it will be super easy to use our 
+is\_valid to create a serialize function! Okay let's try it:
 
-Time to use our genius idea:
-
-Now you would think that it will be super easy to use our is_valid to create a serialize function! Okay let's try it:
-
+```c++
 template <class T> std::string serialize(const T& obj)
 {
     if (is_valid<T>::value) {
@@ -341,8 +347,12 @@ template <class T> std::string serialize(const T& obj)
 
 A a;
 serialize(a);
-It might be hard to accept, but the error raised by your compiler is absolutely normal! If you consider the code that you will obtain after substitution and compile-time evaluation:
+```
 
+It might be hard to accept, but the error raised by your compiler is absolutely normal! If you consider the 
+code that you will obtain after substitution and compile-time evaluation:
+
+```c++
 std::string serialize(const A& obj)
 {
     if (0) { // Dead branching, but the compiler will still consider it!
@@ -351,10 +361,18 @@ std::string serialize(const A& obj)
         return to_string(obj);
     }
 }
-Your compiler is really a good guy and won't drop any dead-branch, and obj must therefore have both a serialize method and a to_string overload in this case. The solution consists in spliting the serialize function into two different functions: one where we solely use obj.serialize() and one where we use to_string according to obj's type. We come back to an earlier problem that we already solved, how to split according to a type? SFINAE, for sure! At that point we could re-work our is_valid function into a serialize function and make it return a std::string instead of compile time boolean. But we won't do it that way! It's cleaner to separate the is_valid test from its usage serialize.
+```
+Your compiler is really a good guy and won't drop any dead-branch, and obj must therefore have both a serialize method and 
+a to\_string overload in this case. The solution consists in spliting the serialize function into two different functions: 
+one where we solely use obj.serialize() and one where we use to\_string according to obj's type. We come back to an earlier 
+problem that we already solved, how to split according to a type? SFINAE, for sure! At that point we could re-work our 
+is\_valid function into a serialize function and make it return a std::string instead of compile time boolean. But we won't 
+do it that way! It's cleaner to separate the is\_valid test from its usage serialize.
 
-We need to find a clever SFINAE solution on the signature of "template <class T> std::string serialize(const T& obj)". I bring you the last piece of the puzzle called enable_if.
+We need to find a clever SFINAE solution on the signature of ```template <class T> std::string serialize(const T& obj)```. 
+I bring you the last piece of the puzzle called enable\_if.
 
+```c++
 template<bool B, class T = void> // Default template version.
 struct enable_if {}; // This struct doesn't define "type" and the substitution will fail if you try to access it.
 
@@ -367,8 +385,13 @@ enable_if<is_valid<B>::value, int>::type t2; // Compiler happy. t's type is int.
 
 enable_if<false, int>::type t3; // Compiler unhappy. no type named 'type' in 'enable_if<false, int>';
 enable_if<is_valid<A>::value, int>::type t4; // no type named 'type' in 'enable_if<false, int>';
-As you can see, we can trigger a substitution failure according to a compile time expression with enable_if. Now we can use this failure on the "template <class T> std::string serialize(const T& obj)" signature to dispatch to the right version. Finally, we have the true solution of our problem:
+```
 
+As you can see, we can trigger a substitution failure according to a compile time expression with enable_if. 
+Now we can use this failure on the "template <class T> std::string serialize(const T& obj)" signature to 
+dispatch to the right version. Finally, we have the true solution of our problem:
+
+```c++
 template <class T> typename enable_if<is_valid<T>::value, std::string>::type serialize(const T& obj)
 {
     return obj.serialize();
@@ -387,10 +410,16 @@ C c;
 std::cout << serialize(a) << std::endl;
 std::cout << serialize(b) << std::endl;
 std::cout << serialize(c) << std::endl;
-Two details worth being noted! Firstly we use enable_if on the return type, in order to keep the paramater deduction, otherwise we would have to specify the type explicitely "serialize<A>(a)". Second, even the version using to_string must use the enable_if, otherwise serialize(b) would have two potential overloads available and raise an ambiguity. If you want to check the full code of this C++98 version, here is a gist. Life is much easier in C++11, so let's see the beauty of this new standard!
+```
+Two details worth being noted! Firstly we use enable_if on the return type, in order to keep the paramater deduction, 
+otherwise we would have to specify the type explicitely "serialize<A>(a)". Second, even the version using to_string 
+must use the enable_if, otherwise serialize(b) would have two potential overloads available and raise an ambiguity. 
+If you want to check the full code of this C++98 version, here is a gist. Life is much easier in C++11, so let's 
+see the beauty of this new standard!
 
-Note: it's also important to know that this code creates a SFINAE on an expression ("&C::serialize"). Whilst this feature wasn't required by the C++98 standard, it was already in use depending on your compiler. It trully became a safe choice in C++11.
-
+Note: it's also important to know that this code creates a SFINAE on an expression ("&C::serialize"). Whilst this 
+feature wasn't required by the C++98 standard, it was already in use depending on your compiler. It trully 
+became a safe choice in C++11.
 
 
 
