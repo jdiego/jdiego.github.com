@@ -77,3 +77,42 @@ fork retuns 0, and if we are in the parent process, it returns the process ID of
 If we’re in the child process, we want to replace whatever we’re currently executing with the program 
 we want to debug.
 
+How is breakpoint formed?
+
+There are two main kinds of breakpoints: hardware and software. 
+Hardware breakpoints typically involve setting architecture-specific 
+registers to produce your breaks for you, whereas software breakpoints 
+involve modifying the code which is being executed on the fly. 
+
+On x86 you can only have four hardware breakpoints set at a given time, 
+but they give you the power to make them fire on just reading from or 
+writing to a given address rather than only executing code there.
+
+We’ll be focusing solely on software breakpoints for this article, as they 
+are simpler and you can have as many as you want. 
+
+
+
+The software breakpoints are set by modifying the executing code on the fly.
+The modification we make has to cause the processor to halt and signal the 
+program when the breakpoint address is executed. On x86 this is accomplished 
+by overwriting the instruction at that address with the `int 3` instruction. 
+x86 has an interrupt vector table which the operating system can use to register 
+handlers for various events, such as page faults, protection faults, and 
+invalid opcodes. It’s kind of like registering error handling callbacks, 
+but right down at the hardware level. When the processor executes the `int 3` 
+instruction, control is passed to the breakpoint interrupt handler, which – 
+in the case of Linux – signals the process with a `SIGTRAP`. 
+
+You can see this process in the diagram below, where we overwrite the first 
+byte of the mov instruction with 0xcc, which is the instruction encoding for int 3.
+
+The last piece of the puzzle is how the debugger is notified of the break. 
+If you remember back in the previous post, we can use waitpid to listen for 
+signals which are sent to the debugee. We can do exactly the same thing here: 
+set the breakpoint, continue the program, call waitpid and wait until the 
+SIGTRAP occurs. This breakpoint can then be communicated to the user, perhaps 
+by printing the source location which has been reached, or changing the 
+focused line in a GUI debugger.
+
+
